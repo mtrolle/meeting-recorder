@@ -98,6 +98,18 @@ struct RecordingDetailView: View {
         }
     }
 
+    /// Enter title-edit mode and pre-select the existing text so the user can
+    /// immediately type to replace. SwiftUI doesn't expose select-on-focus,
+    /// so we briefly defer to let the TextField become first responder, then
+    /// dispatch NSText's selectAll to the responder chain.
+    private func beginTitleEdit() {
+        editedTitle = entry.title
+        editingTitle = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+        }
+    }
+
     // MARK: - Header
 
     private var detailHeader: some View {
@@ -126,8 +138,7 @@ struct RecordingDetailView: View {
                         .font(.title2.weight(.semibold))
 
                         Button {
-                            editedTitle = entry.title
-                            editingTitle = true
+                            beginTitleEdit()
                         } label: {
                             Image(systemName: "pencil")
                                 .foregroundStyle(.secondary)
@@ -136,10 +147,7 @@ struct RecordingDetailView: View {
                         .help("Edit title")
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        editedTitle = entry.title
-                        editingTitle = true
-                    }
+                    .onTapGesture(count: 2) { beginTitleEdit() }
                 }
 
                 HStack(spacing: 8) {

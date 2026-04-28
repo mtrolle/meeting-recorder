@@ -4,6 +4,9 @@ struct MainView: View {
     @ObservedObject var state: AppState
     @ObservedObject var recordingStore: RecordingStore
     @State private var searchText = ""
+    /// Recording whose title is currently being inline-renamed in the sidebar.
+    @State private var editingTitleID: String?
+    @State private var editedSidebarTitle = ""
 
     var body: some View {
         NavigationSplitView {
@@ -193,9 +196,20 @@ struct MainView: View {
             statusDot(entry)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(entry.title)
-                        .font(.body)
-                        .lineLimit(1)
+                    if editingTitleID == entry.id {
+                        TextField("Title", text: $editedSidebarTitle)
+                            .textFieldStyle(.plain)
+                            .font(.body)
+                            .onSubmit { commitSidebarTitleEdit(for: entry) }
+                            .onExitCommand { editingTitleID = nil }
+                    } else {
+                        Text(entry.title.isEmpty ? "Untitled" : entry.title)
+                            .font(.body)
+                            .italic(entry.title.isEmpty)
+                            .foregroundStyle(entry.title.isEmpty ? .secondary : .primary)
+                            .lineLimit(1)
+                            .onTapGesture(count: 2) { beginSidebarTitleEdit(for: entry) }
+                    }
                     if matchedInTranscript(entry) {
                         Image(systemName: "text.magnifyingglass")
                             .font(.caption2)
@@ -210,6 +224,21 @@ struct MainView: View {
                 .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Enter inline-rename mode for the sidebar row and pre-select the existing
+    /// title so a single keystroke replaces it.
+    private func beginSidebarTitleEdit(for entry: RecordingEntry) {
+        editedSidebarTitle = entry.title
+        editingTitleID = entry.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+        }
+    }
+
+    private func commitSidebarTitleEdit(for entry: RecordingEntry) {
+        state.renameRecording(entry, to: editedSidebarTitle)
+        editingTitleID = nil
     }
 
     @ViewBuilder
