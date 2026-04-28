@@ -347,9 +347,9 @@ struct RecordingDetailView: View {
                 }
             }
 
-            if state.recordingStore.audioURL(for: entry) != nil {
+            if let audioURL = state.recordingStore.audioURL(for: entry) {
                 Divider()
-                playerBar
+                PlayerBar(player: state.player, audioURL: audioURL, entryID: entry.id)
             }
         }
     }
@@ -489,94 +489,6 @@ struct RecordingDetailView: View {
         state.player.resume()
     }
 
-    // MARK: - Player Bar
-
-    private var playerBar: some View {
-        VStack(spacing: 6) {
-            GeometryReader { geo in
-                let trackHeight: CGFloat = 6
-                let thumbSize: CGFloat = 14
-                let progress = max(0, min(1, state.player.progress))
-                let thumbX = geo.size.width * progress
-
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(.quaternary)
-                        .frame(height: trackHeight)
-                    Capsule()
-                        .fill(Color.accentColor)
-                        .frame(width: thumbX, height: trackHeight)
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: thumbSize, height: thumbSize)
-                        .shadow(radius: 1, y: 1)
-                        .offset(x: thumbX - thumbSize / 2)
-                }
-                .frame(height: max(trackHeight, thumbSize))
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                    if state.player.totalDuration <= 0 {
-                        if let url = state.recordingStore.audioURL(for: entry) {
-                            state.player.load(url: url)
-                        }
-                        guard state.player.totalDuration > 0 else { return }
-                    }
-                    let fraction = value.location.x / geo.size.width
-                    state.player.seek(to: max(0, min(1, fraction)))
-                })
-                .onHover { inside in
-                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-            }
-            .frame(height: 16)
-            .onAppear { autoLoadAudioForPlayer() }
-            .onChange(of: entry.id) { _, _ in autoLoadAudioForPlayer() }
-
-            HStack {
-                Text(state.player.currentTimeFormatted)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-
-                Button {
-                    if state.player.isPlaying {
-                        state.player.pause()
-                    } else if state.player.progress > 0 && state.player.progress < 1 {
-                        state.player.resume()
-                    } else if let url = state.recordingStore.audioURL(for: entry) {
-                        state.player.play(url: url)
-                    }
-                } label: {
-                    Image(systemName: state.player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text(state.player.totalDurationFormatted)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-
-    /// Pre-load the audio file when the detail view appears or the selected
-    /// recording changes, so `totalDuration` is known and the user can scrub
-    /// before pressing Play. Skipped if the player is currently playing
-    /// (would cancel that session).
-    private func autoLoadAudioForPlayer() {
-        guard !state.player.isPlaying else { return }
-        guard state.player.totalDuration <= 0 else { return }
-        if let url = state.recordingStore.audioURL(for: entry) {
-            state.player.load(url: url)
-        }
-    }
-
     // MARK: - Action Bar
 
     private var actionBar: some View {
@@ -673,3 +585,97 @@ struct RecordingDetailView: View {
     }
 }
 
+// MARK: - Player Bar
+
+/// Audio scrubber + play/pause for a single recording. Owns its observation
+/// of `AudioPlayer` directly so progress and isPlaying changes drive view
+/// updates — embedding the bar inside `RecordingDetailView` and reading
+/// `state.player.progress` doesn't propagate, because `@ObservedObject state`
+/// only republishes on `state`'s own `objectWillChange`, not the nested
+/// player's. Keep this as its own struct so the observation stays tight.
+private struct PlayerBar: View {
+    @ObservedObject var player: AudioPlayer
+    let audioURL: URL
+    let entryID: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                let trackHeight: CGFloat = 6
+                let thumbSize: CGFloat = 14
+                let progress = max(0, min(1, player.progress))
+                let thumbX = geo.size.width * progress
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.quaternary)
+                        .frame(height: trackHeight)
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: thumbX, height: trackHeight)
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: thumbSize, height: thumbSize)
+                        .shadow(radius: 1, y: 1)
+                        .offset(x: thumbX - thumbSize / 2)
+                }
+                .frame(height: max(trackHeight, thumbSize))
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                    if player.totalDuration <= 0 {
+                        player.load(url: audioURL)
+                        guard player.totalDuration > 0 else { return }
+                    }
+                    let fraction = value.location.x / geo.size.width
+                    player.seek(to: max(0, min(1, fraction)))
+                })
+                .onHover { inside in
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            }
+            .frame(height: 16)
+
+            HStack {
+                Text(player.currentTimeFormatted)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+
+                Button {
+                    if player.isPlaying {
+                        player.pause()
+                    } else if player.progress > 0 && player.progress < 1 {
+                        player.resume()
+                    } else {
+                        player.play(url: audioURL)
+                    }
+                } label: {
+                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text(player.totalDurationFormatted)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .onAppear { autoLoad() }
+        .onChange(of: entryID) { _, _ in autoLoad() }
+    }
+
+    /// Pre-load the audio so `totalDuration` is known and the user can scrub
+    /// before pressing Play. Skipped if the player is mid-playback, or
+    /// already loaded for a recording with the same length.
+    private func autoLoad() {
+        guard !player.isPlaying else { return }
+        guard player.totalDuration <= 0 else { return }
+        player.load(url: audioURL)
+    }
+}
