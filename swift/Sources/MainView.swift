@@ -131,8 +131,8 @@ struct MainView: View {
                                     .tag(entry.id)
                                     .contextMenu {
                                         Button("Rename") {
-                                            // Trigger rename by selecting and using detail header
                                             state.selectRecording(entry)
+                                            beginSidebarTitleEdit(for: entry)
                                         }
                                         Button("Reveal in Finder") {
                                             revealInFinder(entry)
@@ -197,11 +197,14 @@ struct MainView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     if editingTitleID == entry.id {
-                        TextField("Title", text: $editedSidebarTitle)
-                            .textFieldStyle(.plain)
-                            .font(.body)
-                            .onSubmit { commitSidebarTitleEdit(for: entry) }
-                            .onExitCommand { editingTitleID = nil }
+                        InlineRenameField(
+                            text: $editedSidebarTitle,
+                            placeholder: "Title",
+                            font: NSFont.systemFont(ofSize: NSFont.systemFontSize),
+                            onSubmit: { commitSidebarTitleEdit(for: entry) },
+                            onCancel: { editingTitleID = nil }
+                        )
+                        .frame(height: 18)
                     } else {
                         Text(entry.title.isEmpty ? "Untitled" : entry.title)
                             .font(.body)
@@ -226,14 +229,11 @@ struct MainView: View {
         }
     }
 
-    /// Enter inline-rename mode for the sidebar row and pre-select the existing
-    /// title so a single keystroke replaces it.
+    /// Enter inline-rename mode for the sidebar row. The InlineRenameField
+    /// that appears handles its own focus + select-all on appear.
     private func beginSidebarTitleEdit(for entry: RecordingEntry) {
         editedSidebarTitle = entry.title
         editingTitleID = entry.id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-        }
     }
 
     private func commitSidebarTitleEdit(for entry: RecordingEntry) {

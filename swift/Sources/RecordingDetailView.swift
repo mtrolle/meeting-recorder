@@ -98,16 +98,11 @@ struct RecordingDetailView: View {
         }
     }
 
-    /// Enter title-edit mode and pre-select the existing text so the user can
-    /// immediately type to replace. SwiftUI doesn't expose select-on-focus,
-    /// so we briefly defer to let the TextField become first responder, then
-    /// dispatch NSText's selectAll to the responder chain.
+    /// Enter title-edit mode. The InlineRenameField that appears handles
+    /// the focus + select-all on its own.
     private func beginTitleEdit() {
         editedTitle = entry.title
         editingTitle = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-        }
     }
 
     // MARK: - Header
@@ -116,14 +111,17 @@ struct RecordingDetailView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 if editingTitle {
-                    TextField("Title", text: $editedTitle)
-                        .textFieldStyle(.plain)
-                        .font(.title2.weight(.semibold))
-                        .onSubmit {
+                    InlineRenameField(
+                        text: $editedTitle,
+                        placeholder: "Title",
+                        font: NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .regular) * 1.4, weight: .semibold),
+                        onSubmit: {
                             state.renameRecording(entry, to: editedTitle)
                             editingTitle = false
-                        }
-                        .onExitCommand { editingTitle = false }
+                        },
+                        onCancel: { editingTitle = false }
+                    )
+                    .frame(height: 28)
                 } else {
                     HStack(spacing: 6) {
                         Group {
