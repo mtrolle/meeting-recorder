@@ -20,8 +20,10 @@ struct MeetingRecorderApp: App {
     @StateObject private var state = AppState()
 
     var body: some Scene {
-        // WindowGroup is the primary scene — auto-opens on launch.
-        WindowGroup("Meeting Recorder") {
+        // Single Window — macOS only ever shows one instance, no Cmd+N
+        // duplication, no state-restoration second copy. WindowGroup was
+        // doubling up on relaunch.
+        Window("Meeting Recorder", id: "main") {
             MainView(state: state, recordingStore: state.recordingStore)
         }
         .defaultSize(width: 860, height: 560)
